@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import ChatBubble from './ChatBubble';
 import ChatHistoryPanel from './ChatHistoryPanel';
+import { API_BASE_URL } from '../config';
 
 interface Policy {
   id: number;
@@ -44,7 +45,7 @@ export default function Home() {
     if (messages.length <= 1) return;
     
     try {
-        await fetch('http://localhost:8000/history/chats', {
+        await fetch(`${API_BASE_URL}/history/chats`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -73,7 +74,7 @@ export default function Home() {
     await saveCurrentChat();
 
     try {
-      const response = await fetch(`http://localhost:8000/history/chats/${id}`);
+      const response = await fetch(`${API_BASE_URL}/history/chats/${id}`);
       const data = await response.json();
       setCurrentChatId(data.id);
       setMessages(data.messages);
@@ -83,22 +84,9 @@ export default function Home() {
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      const userMessage = { from: 'user' as const, text: `Uploaded file: ${file.name}` };
-      setMessages((prevMessages) => [...prevMessages, userMessage]);
-      
-      // Simulate AI response
-      setTimeout(() => {
-        setMessages((prevMessages) => [...prevMessages, { from: 'ai' as const, text: `I've received "${file.name}". Let me analyze it.` }]);
-      }, 1000);
-    }
-  };
-
   const searchForPolicy = async (query: string) => {
     try {
-      const response = await fetch(`http://localhost:8000/search-policy?q=${encodeURIComponent(query)}`);
+      const response = await fetch(`${API_BASE_URL}/search-policy?q=${encodeURIComponent(query)}`);
       if (!response.ok) throw new Error('Network response was not ok');
       const data = await response.json();
       if (data.length > 0) {
@@ -120,7 +108,7 @@ export default function Home() {
 
   const askAboutPolicy = async (policy: Policy, question: string) => {
     try {
-      const response = await fetch('http://localhost:8000/ask-question', {
+      const response = await fetch(`${API_BASE_URL}/ask-question`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ policy_id: policy.id, question: question }),
@@ -156,7 +144,7 @@ export default function Home() {
     setMessages(prev => [...prev, userMessage]);
 
     try {
-        const response = await fetch(`http://localhost:8000/policy/${policy.id}`);
+        const response = await fetch(`${API_BASE_URL}/policy/${policy.id}`);
         if (!response.ok) throw new Error('Network response was not ok');
         const terms: ImportantTerm[] = await response.json();
 

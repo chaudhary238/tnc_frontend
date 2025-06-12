@@ -44,7 +44,8 @@ interface ChatBubbleProps {
 
 const ChatBubble = ({ message, isLastMessage, onPolicySelect }: ChatBubbleProps) => {
   const isAi = message.from === 'ai';
-  const textToRender = isAi && isLastMessage ? useTypewriter(message.text) : message.text;
+  const typedText = useTypewriter(message.text);
+  const textToRender = isAi && isLastMessage ? typedText : message.text;
 
   return (
     <div className={`flex items-start ${isAi ? '' : 'justify-end'}`}>
@@ -57,9 +58,9 @@ const ChatBubble = ({ message, isLastMessage, onPolicySelect }: ChatBubbleProps)
         <div className="text-sm whitespace-pre-wrap">
           <ReactMarkdown
              components={{
-                p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />,
-                strong: ({node, ...props}) => <strong className="font-bold" {...props} />,
-                em: ({node, ...props}) => <i className="italic" {...props} />,
+                p: ({...props}) => <p className="mb-2 last:mb-0" {...props} />,
+                strong: ({...props}) => <strong className="font-bold" {...props} />,
+                em: ({...props}) => <i className="italic" {...props} />,
              }}
           >
             {textToRender}
