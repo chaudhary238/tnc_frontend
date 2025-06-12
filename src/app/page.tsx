@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import ChatBubble from './ChatBubble';
 import ChatHistoryPanel from './ChatHistoryPanel';
-import { API_BASE_URL } from '../config';
+import { API_BASE_URL, API_CONFIG } from '../config';
 
 interface Policy {
   id: number;
@@ -47,7 +47,7 @@ export default function Home() {
     try {
         await fetch(`${API_BASE_URL}/history/chats`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            ...API_CONFIG,
             body: JSON.stringify({
                 chat_id: currentChatId,
                 messages: messages,
@@ -74,7 +74,9 @@ export default function Home() {
     await saveCurrentChat();
 
     try {
-      const response = await fetch(`${API_BASE_URL}/history/chats/${id}`);
+      const response = await fetch(`${API_BASE_URL}/history/chats/${id}`, {
+        ...API_CONFIG
+      });
       const data = await response.json();
       setCurrentChatId(data.id);
       setMessages(data.messages);
@@ -86,7 +88,9 @@ export default function Home() {
 
   const searchForPolicy = async (query: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/search-policy?q=${encodeURIComponent(query)}`);
+      const response = await fetch(`${API_BASE_URL}/search-policy?q=${encodeURIComponent(query)}`, {
+        ...API_CONFIG
+      });
       if (!response.ok) throw new Error('Network response was not ok');
       const data = await response.json();
       if (data.length > 0) {
@@ -110,7 +114,7 @@ export default function Home() {
     try {
       const response = await fetch(`${API_BASE_URL}/ask-question`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        ...API_CONFIG,
         body: JSON.stringify({ policy_id: policy.id, question: question }),
       });
       const data = await response.json();

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { API_BASE_URL } from '../config'; // Import the API base URL
+import { API_BASE_URL, API_CONFIG } from '../config'; // Import the API base URL and API configuration
 
 interface ChatInfo {
   id: number;
@@ -21,7 +21,9 @@ const ChatHistoryPanel = ({ onSelectChat, activeChatId, refreshKey }: ChatHistor
   useEffect(() => {
     const fetchChats = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/history/chats`);
+        const response = await fetch(`${API_BASE_URL}/history/chats`, {
+          ...API_CONFIG
+        });
         if (!response.ok) {
           throw new Error('Failed to fetch chat history');
         }
