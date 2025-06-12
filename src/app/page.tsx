@@ -148,7 +148,9 @@ export default function Home() {
     setMessages(prev => [...prev, userMessage]);
 
     try {
-        const response = await fetch(`${API_BASE_URL}/policy/${policy.id}`);
+        const response = await fetch(`${API_BASE_URL}/policy/${policy.id}`, {
+          ...API_CONFIG
+        });
         if (!response.ok) throw new Error('Network response was not ok');
         const terms: ImportantTerm[] = await response.json();
 
