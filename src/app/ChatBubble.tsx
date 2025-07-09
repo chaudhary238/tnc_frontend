@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Message, Policy } from './types';
+import { Message, Policy, RecommendedPolicyWithMetrics } from './types';
 import ReactMarkdown from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
 import { useTypewriter } from '../hooks/useTypewriter';
@@ -9,12 +9,15 @@ import { useTypewriter } from '../hooks/useTypewriter';
 interface ChatBubbleProps {
   message: Message;
   onPolicySelect: (policy: Policy) => void;
-  isLastMessage: boolean;
+  isLastMessage: boolean; // To control the typewriter effect
 }
 
 const ChatBubble: React.FC<ChatBubbleProps> = ({ message, onPolicySelect, isLastMessage }) => {
   const isAi = message.from === 'ai';
-  const displayedText = isAi && isLastMessage ? useTypewriter(message.text) : message.text;
+  // Call hook unconditionally at the top level
+  const typedText = useTypewriter(message.text);
+  // Use the hook's return value conditionally
+  const displayedText = isAi && isLastMessage ? typedText : message.text;
 
   return (
     <div className={`flex items-start ${isAi ? 'justify-start' : 'justify-end'}`}>
@@ -28,7 +31,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({ message, onPolicySelect, isLast
       )}
 
       <div className={`mx-3 p-3 rounded-lg shadow-md max-w-2xl ${isAi ? 'bg-white text-gray-800' : 'bg-blue-500 text-white'}`}>
-        <div className="text-sm whitespace-pre-line">
+        <div className="text-sm whitespace-pre-wrap">
           <ReactMarkdown
             rehypePlugins={[rehypeRaw]}
             components={{
@@ -63,9 +66,9 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({ message, onPolicySelect, isLast
           <div className="mt-4 border-t pt-3">
             <p className="font-semibold text-lg mb-3">Recommended Policies:</p>
             {(() => {
-              const groupedByInsurer: { [insurerName: string]: { metrics: any; policies: Policy[] } } = {};
+              const groupedByInsurer: { [insurerName: string]: { metrics: RecommendedPolicyWithMetrics['insurer_metrics']; policies: Policy[] } } = {};
               message.recommendedPoliciesWithMetrics.forEach(item => {
-                const insurerName = item.insurer_metrics?.insurer_name || 'Unknown Insurer';
+                const insurerName = (item.insurer_metrics?.insurer_name as string) || 'Unknown Insurer';
                 if (!groupedByInsurer[insurerName]) {
                   groupedByInsurer[insurerName] = {
                     metrics: item.insurer_metrics,

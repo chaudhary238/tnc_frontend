@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     const backendResponse = await fetch(`${BACKEND_URL}/history/chats`, {
       method: 'GET',
@@ -29,10 +29,11 @@ export async function GET(req: NextRequest) {
       },
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("API route error:", error);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
     return new NextResponse(
-      JSON.stringify({ message: 'An internal server error occurred.', details: error.message }),
+      JSON.stringify({ message: 'An internal server error occurred.', details: errorMessage }),
       { status: 500 }
     );
   }

@@ -20,7 +20,7 @@ export interface Message {
 
 export interface RecommendedPolicyWithMetrics {
   policy: Policy;
-  insurer_metrics: { [key: string]: any }; // Using any for now, can be more specific later
+  insurer_metrics: { [key: string]: unknown };
 }
 
 export interface InitialQueryResponse {

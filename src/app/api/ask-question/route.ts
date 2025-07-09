@@ -34,10 +34,11 @@ export async function POST(req: NextRequest) {
       },
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("API route error:", error);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
     return new NextResponse(
-      JSON.stringify({ message: 'An internal server error occurred.', details: error.message }),
+      JSON.stringify({ message: 'An internal server error occurred.', details: errorMessage }),
       { status: 500 }
     );
   }
