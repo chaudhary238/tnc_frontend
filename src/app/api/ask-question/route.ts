@@ -5,7 +5,7 @@ const BACKEND_URL = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { question, policy_id } = body;
+    const { question, policy_id, history } = body;
 
     const backendResponse = await fetch(`${BACKEND_URL}/ask-question`, {
       method: 'POST',
@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       },
-      body: JSON.stringify({ question, policy_id }),
+      body: JSON.stringify({ question, policy_id, history }),
     });
 
     if (!backendResponse.ok) {

@@ -31,7 +31,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({ message, onPolicySelect, isLast
       )}
 
       <div className={`mx-3 p-3 rounded-lg shadow-md max-w-2xl ${isAi ? 'bg-white text-gray-800' : 'bg-blue-500 text-white'}`}>
-        <div className="text-sm whitespace-pre-wrap">
+        <div className="text-sm whitespace-pre-line">
           <ReactMarkdown
             rehypePlugins={[rehypeRaw]}
             components={{

@@ -5,8 +5,7 @@ const BACKEND_URL = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    // The frontend page.tsx now sends `question`, so we destructure `question` here.
-    const { question, chat_id } = body;
+    const { question, chat_id, history } = body;
 
     const backendResponse = await fetch(`${BACKEND_URL}/initial-query-analysis`, {
       method: 'POST',
@@ -14,8 +13,7 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       },
-      // The backend also expects `question`.
-      body: JSON.stringify({ question, chat_id }),
+      body: JSON.stringify({ question, chat_id, history }),
     });
 
     if (!backendResponse.ok) {

@@ -85,51 +85,43 @@ export default function Home() {
     const userQuery = inputRef.current.value;
     const userMessage: Message = { from: 'user', text: userQuery };
     
-    // Correctly append the new user message and the "Thinking..." indicator
     setMessages(prev => [...prev, userMessage, { from: 'ai', text: 'Thinking...' }]);
     setIsLoading(true);
 
     try {
+      // Filter out the initial greeting from the history sent to the API by comparing text content
+      const history = messages.filter(m => m.text !== INITIAL_GREETING.text).slice(-8);
+
+      const response = await fetch('/api/ask-question', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: userQuery,
+          policy_id: selectedPolicy?.id,
+          history: history,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.statusText}`);
+      }
+      
+      const responseData = await response.json();
+
+      // --- Handle Multi-Stage Responses ---
       let finalAiMessage: Message;
-
-      if (selectedPolicy) {
-        // If a policy is selected, use the dedicated RAG question endpoint
-        const response = await fetch('/api/ask-question', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            question: userQuery,
-            policy_id: selectedPolicy.id
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`API Error: ${response.statusText}`);
-        }
-        const ragResponse = await response.json();
-        finalAiMessage = { from: 'ai', text: ragResponse.answer || "I couldn't find a specific answer in the policy document." };
-
-      } else {
-        // If no policy is selected, use the initial analysis endpoint
-        const response = await fetch('/api/initial-query-analysis', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            question: userQuery, 
-            chat_id: activeChatId 
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`API Error: ${response.statusText}`);
-        }
-
-        const aiResponse: InitialQueryResponse = await response.json();
+      if (responseData.action === 'clarification') {
         finalAiMessage = { 
           from: 'ai', 
-          text: aiResponse.message || "Here are some results.",
-          policies: aiResponse.policies,
-          recommendedPoliciesWithMetrics: aiResponse.recommended_policies_with_metrics
+          text: responseData.answer,
+          policies: responseData.policies, // Attach policies for clarification
+        };
+      } else {
+        // This handles regular agent chats, RAG answers, and future structured data
+        finalAiMessage = { 
+          from: 'ai', 
+          text: responseData.answer || "Sorry, I encountered an issue and couldn't get a response.",
+          recommendedPoliciesWithMetrics: responseData.recommended_policies_with_metrics
         };
       }
       
