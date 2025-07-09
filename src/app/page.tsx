@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, FormEvent } from 'react';
-import { Message, Policy, InitialQueryResponse, ChatInfo, ImportantTerm } from './types';
+import { Message, Policy, ChatInfo, ImportantTerm } from './types';
 import ChatBubble from './ChatBubble';
 import InsurerAnalytics from './InsurerAnalytics';
 import PolicyRecommendation from './PolicyRecommendation';
