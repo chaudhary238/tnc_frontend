@@ -1,0 +1,43 @@
+import { NextRequest, NextResponse } from 'next/server';
+
+const BACKEND_URL = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
+
+export async function GET(
+  req: NextRequest,
+  { params }: { params: { chatId: string } }
+) {
+  try {
+    const chatId = params.chatId;
+    const backendResponse = await fetch(`${BACKEND_URL}/history/chats/${chatId}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!backendResponse.ok) {
+      const errorBody = await backendResponse.text();
+      console.error("Backend error getting chat session:", errorBody);
+      return new NextResponse(
+        JSON.stringify({ message: `An error occurred on the backend: ${backendResponse.statusText}` }),
+        { status: backendResponse.status }
+      );
+    }
+
+    const data = await backendResponse.json();
+
+    return new NextResponse(JSON.stringify(data), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+  } catch (error: any) {
+    console.error("API route error:", error);
+    return new NextResponse(
+      JSON.stringify({ message: 'An internal server error occurred.', details: error.message }),
+      { status: 500 }
+    );
+  }
+} 

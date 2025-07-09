@@ -1,240 +1,279 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef, useEffect, FormEvent } from 'react';
+import { Message, Policy, InitialQueryResponse, ChatInfo, ImportantTerm } from './types';
 import ChatBubble from './ChatBubble';
-import ChatHistoryPanel from './ChatHistoryPanel';
-import { API_BASE_URL, API_CONFIG } from '../config';
+import InsurerAnalytics from './InsurerAnalytics';
+import PolicyRecommendation from './PolicyRecommendation';
 
-interface Policy {
-  id: number;
-  name: string;
-  summary: string;
-}
+type ActiveTab = 'chat' | 'compare' | 'analytics';
 
-interface ImportantTerm {
-    term: string;
-    description: string;
-    details?: string[];
-    user_must_know: string;
-}
-
-interface Message {
-  from: 'user' | 'ai';
-  text: string;
-  policies?: Policy[];
-}
-
-const initialMessages: Message[] = [
-    { from: 'ai', text: 'Hello! How can I help you today? You can search for a policy to get started.' }
-];
+const INITIAL_GREETING: Message = {
+  from: 'ai',
+  text: "Hello! I'm your AI assistant for health insurance policies. Feel free to ask me about a specific plan, or I can help you find a new one. How can I help you today?"
+};
 
 export default function Home() {
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
-  const [inputValue, setInputValue] = useState('');
+  const [messages, setMessages] = useState<Message[]>([INITIAL_GREETING]);
+  const [isLoading, setIsLoading] = useState(false);
   const [selectedPolicy, setSelectedPolicy] = useState<Policy | null>(null);
-  const [currentChatId, setCurrentChatId] = useState<number | null>(null);
-  const [historyRefreshKey, setHistoryRefreshKey] = useState<number>(0);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const isProcessing = useRef(false);
+  const [chatHistory, setChatHistory] = useState<ChatInfo[]>([]);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<ActiveTab>('chat');
+
+  const inputRef = useRef<HTMLInputElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
   }, [messages]);
 
-  const saveCurrentChat = async () => {
-    if (messages.length <= 1) return;
-    
-    try {
-        await fetch(`${API_BASE_URL}/history/chats`, {
-            method: 'POST',
-            ...API_CONFIG,
-            body: JSON.stringify({
-                chat_id: currentChatId,
-                messages: messages,
-                selected_policy: selectedPolicy,
-            }),
-        });
-        setHistoryRefreshKey(prev => prev + 1);
-    } catch (error) {
-        console.error("Failed to save chat session:", error);
-    }
-  };
+  useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const response = await fetch('/api/chat-history');
+        if (response.ok) {
+          const data: ChatInfo[] = await response.json();
+          setChatHistory(data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch chat history:", error);
+      }
+    };
+    fetchHistory();
+  }, []);
 
-  const handleNewChat = async () => {
-    await saveCurrentChat();
-    setMessages(initialMessages);
-    setInputValue('');
+  const handleNewChat = () => {
+    setActiveChatId(null);
     setSelectedPolicy(null);
-    setCurrentChatId(null);
-  };
-
-  const handleSelectChat = async (id: number) => {
-    if (id === currentChatId) return;
-
-    await saveCurrentChat();
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/history/chats/${id}`, {
-        ...API_CONFIG
-      });
-      const data = await response.json();
-      setCurrentChatId(data.id);
-      setMessages(data.messages);
-      setSelectedPolicy(data.selected_policy);
-    } catch (error) {
-      console.error("Failed to load chat session:", error);
+    setMessages([INITIAL_GREETING]);
+    if (inputRef.current) {
+      inputRef.current.value = "";
     }
+    setActiveTab('chat');
   };
 
-  const searchForPolicy = async (query: string) => {
+  const loadChat = async (chatId: string) => {
+    if (activeChatId === chatId) return;
+    setIsLoading(true);
+    setActiveTab('chat');
     try {
-      const response = await fetch(`${API_BASE_URL}/search-policy?q=${encodeURIComponent(query)}`, {
-        ...API_CONFIG
-      });
-      if (!response.ok) throw new Error('Network response was not ok');
-      const data = await response.json();
-      if (data.length > 0) {
-        const aiMessage = {
-          from: 'ai' as const,
-          text: 'I found these policies for you. Please select one to ask questions:',
-          policies: data,
-        };
-        setMessages((prev) => [...prev, aiMessage]);
+      const response = await fetch(`/api/chat-history/${chatId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setActiveChatId(chatId);
+        setMessages(data.messages || []);
+        setSelectedPolicy(data.selected_policy || null);
       } else {
-        const aiResponse = `Sorry, I couldn't find any policies matching "${query}".`;
-        setMessages((prev) => [...prev, { from: 'ai' as const, text: aiResponse }]);
+        console.error("Failed to load chat session:", await response.text());
+        handleNewChat();
       }
     } catch (error) {
-      console.error("Error fetching from backend:", error);
-      setMessages((prev) => [...prev, { from: 'ai' as const, text: 'Sorry, I am having trouble connecting to the server.' }]);
+      console.error("Error loading chat session:", error);
+      handleNewChat();
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const askAboutPolicy = async (policy: Policy, question: string) => {
+  const handleSearch = async (e: FormEvent) => {
+    e.preventDefault();
+    if (isLoading || !inputRef.current?.value) return;
+
+    const userQuery = inputRef.current.value;
+    const userMessage: Message = { from: 'user', text: userQuery };
+    
+    // Correctly append the new user message and the "Thinking..." indicator
+    setMessages(prev => [...prev, userMessage, { from: 'ai', text: 'Thinking...' }]);
+    setIsLoading(true);
+
     try {
-      const response = await fetch(`${API_BASE_URL}/ask-question`, {
-        method: 'POST',
-        ...API_CONFIG,
-        body: JSON.stringify({ policy_id: policy.id, question: question }),
-      });
-      const data = await response.json();
-      setMessages((prev) => [...prev, { from: 'ai' as const, text: data.answer }]);
-    } catch (error) {
-      console.error("Error fetching from backend:", error);
-      setMessages((prev) => [...prev, { from: 'ai' as const, text: 'Sorry, I am having trouble connecting to the server.' }]);
-    }
-  };
-
-  const handleSend = async () => {
-    if (inputValue.trim() && !isProcessing.current) {
-      isProcessing.current = true;
-      const userMessage = { from: 'user' as const, text: inputValue };
-      setMessages((prevMessages) => [...prevMessages, userMessage]);
-      const currentInputValue = inputValue;
-      setInputValue('');
+      let finalAiMessage: Message;
 
       if (selectedPolicy) {
-        await askAboutPolicy(selectedPolicy, currentInputValue);
+        // If a policy is selected, use the dedicated RAG question endpoint
+        const response = await fetch('/api/ask-question', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question: userQuery,
+            policy_id: selectedPolicy.id
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`API Error: ${response.statusText}`);
+        }
+        const ragResponse = await response.json();
+        finalAiMessage = { from: 'ai', text: ragResponse.answer || "I couldn't find a specific answer in the policy document." };
+
       } else {
-        await searchForPolicy(currentInputValue);
+        // If no policy is selected, use the initial analysis endpoint
+        const response = await fetch('/api/initial-query-analysis', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            question: userQuery, 
+            chat_id: activeChatId 
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`API Error: ${response.statusText}`);
+        }
+
+        const aiResponse: InitialQueryResponse = await response.json();
+        finalAiMessage = { 
+          from: 'ai', 
+          text: aiResponse.message || "Here are some results.",
+          policies: aiResponse.policies,
+          recommendedPoliciesWithMetrics: aiResponse.recommended_policies_with_metrics
+        };
       }
-      isProcessing.current = false;
+      
+      setMessages(prev => [...prev.slice(0, -1), finalAiMessage]);
+
+    } catch (error) {
+      console.error("Failed to get response:", error);
+      setMessages(prev => [...prev.slice(0, -1), { from: 'ai', text: "Sorry, I'm having trouble connecting. Please try again later." }]);
+    } finally {
+      setIsLoading(false);
+      if (inputRef.current) {
+        inputRef.current.value = "";
+      }
     }
   };
 
   const handlePolicySelect = async (policy: Policy) => {
     setSelectedPolicy(policy);
-    const userMessage = { from: 'user' as const, text: `Tell me more about "${policy.name}"`};
+    const userMessage: Message = { from: 'user', text: `Tell me more about "${policy.policy_name}"` };
     setMessages(prev => [...prev, userMessage]);
+    setIsLoading(true);
 
     try {
-        const response = await fetch(`${API_BASE_URL}/policy/${policy.id}`, {
-          ...API_CONFIG
-        });
-        if (!response.ok) throw new Error('Network response was not ok');
-        const terms: ImportantTerm[] = await response.json();
+      const response = await fetch('/api/get-crucial-terms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ policy_id: policy.id }),
+      });
 
-        let termsText = `Here are the key terms for **${policy.name}**:\n\n`;
-        terms.forEach(term => {
-            termsText += `**${term.term}:**\n${term.description}\n\n*User must know: ${term.user_must_know}*\n\n---\n\n`;
-        });
-        termsText += `\nWhat would you like to know about ${policy.name}? You can ask questions like "what is the waiting period?"`;
+      if (!response.ok) {
+        throw new Error('Failed to fetch crucial terms');
+      }
+      const crucialTerms: ImportantTerm[] = await response.json();
 
-        const aiMessage = { from: 'ai' as const, text: termsText };
-        setMessages(prev => [...prev, aiMessage]);
+      let termsText = `Here are the crucial terms for **${policy.policy_name}**:`;
+      if (crucialTerms && crucialTerms.length > 0) {
+          const firstTerm = crucialTerms[0];
+          termsText += `\n\n**${firstTerm.term}**: ${firstTerm.description}`;
+          
+          if (crucialTerms.length > 1) {
+              termsText += `\n\nI can also tell you about other terms like:`;
+              crucialTerms.slice(1, 4).forEach(term => {
+                  termsText += `\n- *${term.term}*`;
+              });
+          }
+      } else {
+          termsText += `\nNo crucial terms found for **${policy.policy_name}**`;
+      }
+      
+      termsText += `\n\nWhat would you like to know about ${policy.policy_name}? You can ask questions like "what is the waiting period?"`;
+
+      setMessages(prev => [...prev, { from: 'ai', text: termsText }]);
 
     } catch (error) {
-        console.error("Error fetching policy details:", error);
-        setMessages((prev) => [...prev, { from: 'ai' as const, text: 'Sorry, I am having trouble fetching the policy details.' }]);
+      console.error(error);
+      setMessages(prev => [...prev, { from: 'ai', text: `Sorry, I couldn't get the details for ${policy.policy_name}.` }]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="flex h-screen bg-gray-100">
-      <ChatHistoryPanel 
-        onSelectChat={handleSelectChat}
-        activeChatId={currentChatId}
-        refreshKey={historyRefreshKey}
-      />
-      <div className="flex-1 flex flex-col">
-        <header className="bg-white shadow-md p-4 flex justify-between items-center z-10">
-          <h1 className="text-2xl font-bold text-gray-800">T&C Summarizer</h1>
-          <button
-            onClick={handleNewChat}
-            className="p-2 rounded-full hover:bg-gray-200 transition-colors"
-            title="New Chat"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-gray-600">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+    <main className="flex h-screen bg-gray-100">
+      <div className="w-64 bg-white p-4 border-r border-gray-200 flex flex-col">
+        <h1 className="text-2xl font-bold mb-6">PolicyAI</h1>
+        <nav className="flex flex-col space-y-2 mb-6">
+          <button onClick={() => setActiveTab('chat')} className={`w-full text-left py-2 px-4 rounded ${activeTab === 'chat' ? 'bg-blue-500 text-white' : 'text-gray-900 hover:bg-gray-200'}`}>
+            Chat
           </button>
-        </header>
-
-        <main className="flex-1 overflow-y-auto p-4">
-          <div className="flex flex-col space-y-4">
-            {messages.map((msg, index) => (
-              <ChatBubble
-                key={index}
-                message={msg}
-                isLastMessage={index === messages.length - 1}
-                onPolicySelect={handlePolicySelect}
-              />
+          <button onClick={() => setActiveTab('compare')} className={`w-full text-left py-2 px-4 rounded ${activeTab === 'compare' ? 'bg-blue-500 text-white' : 'text-gray-900 hover:bg-gray-200'}`}>
+            Compare Policies
+          </button>
+          <button onClick={() => setActiveTab('analytics')} className={`w-full text-left py-2 px-4 rounded ${activeTab === 'analytics' ? 'bg-blue-500 text-white' : 'text-gray-900 hover:bg-gray-200'}`}>
+            Insurer Analytics
+          </button>
+        </nav>
+        <div className="flex-grow border-t pt-4">
+          <h2 className="text-lg font-semibold mb-3">Chat History</h2>
+          <button onClick={handleNewChat} className="mb-3 w-full text-left py-2 px-3 rounded bg-blue-500 text-white hover:bg-blue-600 text-sm">
+            + New Chat
+          </button>
+          <div className="flex-grow overflow-y-auto">
+            {chatHistory.map(chat => (
+              <button
+                key={chat.id}
+                onClick={() => loadChat(chat.id)}
+                className={`w-full text-left py-2 px-3 rounded truncate text-sm ${activeChatId === chat.id ? 'bg-blue-100 text-blue-800' : 'hover:bg-gray-100'}`}
+              >
+                {chat.title || "Untitled Chat"}
+              </button>
             ))}
-            <div ref={messagesEndRef} />
           </div>
-        </main>
-
-        <footer className="bg-white shadow-t-md p-4">
-          <div className="flex items-center">
-            <div className="flex-1 relative">
-              <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-gray-400">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-                </svg>
-              </div>
-              <input
-                type="text"
-                placeholder={selectedPolicy ? `Ask a question about ${selectedPolicy.name}...` : "Search for a policy..."}
-                className="w-full rounded-full py-2 pl-12 pr-4 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                disabled={isProcessing.current}
-              />
-            </div>
-             <button
-              className="ml-4 rounded-full bg-blue-500 p-2 text-white hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-400"
-              title="Send"
-              onClick={handleSend}
-              disabled={isProcessing.current}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-              </svg>
-            </button>
-          </div>
-        </footer>
+        </div>
       </div>
-    </div>
+      
+      <div className="flex-1 flex flex-col bg-white">
+        {activeTab === 'chat' && (
+          <div className="flex-1 flex flex-col p-4 overflow-hidden">
+            <h1 className="text-2xl font-bold mb-4 text-gray-800">Policy Chatbot</h1>
+            {selectedPolicy && (
+              <div className="mb-4 p-2 bg-blue-100 rounded-lg">
+                <p className="text-sm font-semibold">Chatting about: {selectedPolicy.policy_name}</p>
+              </div>
+            )}
+            <div ref={chatContainerRef} className="flex-1 space-y-4 overflow-y-auto pr-4">
+              {messages
+                .filter(Boolean) 
+                .map((message, index) => (
+                <ChatBubble
+                  key={index}
+                  message={message}
+                  isLastMessage={index === messages.length - 1}
+                  onPolicySelect={handlePolicySelect}
+                />
+              ))}
+              {isLoading && messages.length > 0 && messages[messages.length - 1]?.from !== 'ai' && (
+                <ChatBubble
+                  message={{ from: 'ai', text: 'Thinking...' }}
+                  isLastMessage={true}
+                  onPolicySelect={() => {}}
+                />
+              )}
+            </div>
+            <div className="mt-4">
+              <form onSubmit={handleSearch}>
+                <div className="flex items-center">
+                  <input
+                    type="text"
+                    ref={inputRef}
+                    placeholder={isLoading ? "Thinking..." : (selectedPolicy ? `Ask about ${selectedPolicy.policy_name}...` : "Type your message...")}
+                    className="flex-grow p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={isLoading}
+                  />
+                  <button type="submit" disabled={isLoading} className="ml-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-blue-300">
+                    Send
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+        {activeTab === 'compare' && <PolicyRecommendation />}
+        {activeTab === 'analytics' && <InsurerAnalytics />}
+      </div>
+    </main>
   );
 }
